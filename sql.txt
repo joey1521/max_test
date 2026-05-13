@@ -1,0 +1,652 @@
+--**************************************************************************
+-- ** 所属主题: 准备金
+-- ** 功能描述: 三星保单变化责任信息(险别）
+-- ** 创建者 :  v_cmjiang
+-- ** 创建日期: 2023/10/19
+-- ** 文件名：  t_dwd_variety_liability_info_dd_global_sit.hql 
+-- ** TAPD Id：
+-- ** Issues Id：
+-- ** 注意事项：
+-- ** 修改日志:
+-- ** 修改日期 修改人     修改内容
+-- yyyymmdd name COMMENT
+--**************************************************************************
+--**************************************************************************
+
+
+
+create table if not exists dwd_sit.t_dwd_variety_liability_info_dd_test
+(
+ group_policy_no                string           comment  '团单号'                         
+,policy_no                      string           comment  '保单号' 
+,endorse_no                     string           comment  '批单号' 
+,term_no                        string           comment  '期次' 
+,proposal_no                    string           comment  '投保单'
+,business_line                  string           comment  '业务条线（CIRC18大类）'    
+,product_code	                string           comment  '产品编码' 
+,risk_no                        string           comment  '险种单号' 
+,risk_code                      string           comment  '险种编码' 
+,liability_no                   string           comment  '责任单号(险别）' 
+,liability_code                 string           comment  '责任编码(险别）' 
+,vat_tax_rate                   decimal(23,6)    comment  '增值税税率' 
+,vat_tax_free_flag              string           comment  '是否免税' 
+,own_face_amount                decimal(23,6)    comment  '我司保额' 
+,own_risk_amount                decimal(23,6)    comment  '我司风险保额' 
+,own_premium                    decimal(23,6)    comment  '我司累计保费' 
+,own_vat_tax                    decimal(23,6)    comment  '我司累计增值税税额' 
+,own_total_amount               decimal(23,6)    comment  '我司累计价税合计' 
+,face_amount                    decimal(23,6)    comment  '保额' 
+,risk_amount                    decimal(23,6)    comment  '风险保额' 
+,premium                        decimal(23,6)    comment  '保费' 
+,vat_tax                        decimal(23,6)    comment  '增值税税额' 
+,total_amount                   decimal(23,6)    comment  '价税合计' 
+,commission_rate                decimal(23,10)   comment  '手续费比例' 
+,agency_rate                    decimal(23,10)   comment  '代理费比例' 
+,brokerge_rate                  decimal(23,10)   comment  '经纪费比例' 
+,coin_rate                      decimal(23,10)   comment  '出单费比例' 
+,survery_rate                   decimal(23,10)   comment  '查勘咨询费比例' 
+,tm_rate                        decimal(23,10)   comment  '电销费比例'
+,promote_rate                   decimal(23,10)   comment  '展业费比例'
+,commission_expense             decimal(23,6)    comment  '手续费（代理费+经纪费）' 
+,agency_expense                 decimal(23,6)    comment  '代理费' 
+,brokerge                       decimal(23,6)    comment  '经纪费' 
+,coin_expense                   decimal(23,6)    comment  '出单费' 
+,survery_fee                    decimal(23,6)    comment  '查勘咨询费（业务管理费）' 
+,tm_expense                     decimal(23,6)    comment  '电销费' 
+,promote_fee                    decimal(23,6)    comment  '展业费' 
+,liability_second_class         string           comment  '承保责任二级分类' 
+,liability_third_class          string           comment  '承保责任三级分类' 
+,liability_four_class           string           comment  '承保责任四级分类' 
+,exchange_rate                  decimal(23,10)   comment  '本位币汇率' 
+,prevention_rate                decimal(23,10)   comment  '安责险费用比例'
+,prevention_fee                 decimal(23,6)    comment  '安责险费用' 
+,input_date	         			string		     comment  '业务截止日期(YYYY-MM-DD)'
+,newend_date	         		string		     comment  '最新终保日期(YYYY-MM-DD)'
+,settle_serial_no	         	string		     comment  '结算流水号'
+,commission_expense_vat	        decimal(23,10)	 comment  '手续费税额（代理费+经纪费）'
+,agency_expense_vat	         	decimal(23,10)	 comment  '代理费税额'
+,brokerge_vat	         		decimal(23,10)	 comment  '经纪费税额'
+,commission_vat_rate	        decimal(23,10)	 comment  '手续费税率'
+
+) comment '三星保单变化责任信息' 
+partitioned by (`pt_day` string comment '数据日期, yyyy-mm-dd',`system_source` string	comment '系统来源GLABAL（global） AUTO（车险） CORE（新非车）') 
+stored as orc tblproperties ("orc.compress"="SNAPPY");
+
+
+
+
+----维度数据统计
+drop table if exists dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1;
+create table dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1 
+  as
+select * from (
+select
+ ag01.plcy_no as plcy_no,--保单号
+ ag07.event_no as endo_no,--批单号
+ ic01.covr_cd as covr_cd,--责任代码
+ case when ag01.prod_cd not in ('04001') then
+-- (case when it15.countnum = 0 then '00' else '01' end)
+-- else '00'
+-- end as actl_sprt_cls,--序号
+  (case when it15.plcy_no is null then '00' else '01' end)
+-- else '00'
+ end as actl_sprt_cls,--序号
+ case when
+ ag01.prod_cd not in ('04001') then
+ (case when gr01.prod_cls = '1' then '15' else gr18.data_val1 end )
+ else gr18.data_val1 end  as bsns_line,--业务条线
+ case when
+ ag01.prod_cd not in ('04001') then
+ case when ic04.tax_free = 'Y'
+ and gr01.prod_cls = '1'
+ then 'HEAL'
+ else ag01.prod_cd
+ end
+ else ag01.prod_cd end
+ as prod_cd,-- 产品代码
+ '02' as cust_cls,-- 客户类型(个团)
+ --it03.info_val as info_val,
+ --it03.INFO_CD as INFO_CD,
+ it03_10007.info_val as corp_cust_cls,-- 客户类别
+ it03_10035.info_val as branch_cd,-- 分公司
+ dp00.branch_dept_cd,-- 分公司
+ '10' as indr_cls_cd,-- 录入来源(销售渠道)
+ it13.clerk_no as indr_clerk,-- 渠道人员代码
+ it03_10113.info_val as outdr_cls_cd,-- 直接/经济/代理
+ it03_10018.info_val as outdr_clerk,-- 实际渠道代码
+ it03_10597.info_val as info_val_10597,
+ it03_10636.info_val as info_val_10636,
+ ag01.agrm_typ as agrm_typ,-- 直接、分入
+ it03_10038.info_val as renew_cls,--区分新/续订
+ case when ag01.agrm_typ = '0' then ag01.contor_id
+ else it03_10003.info_val
+ end as contor_cd,-- 投保人代码
+ ag01.prstnsrd_id as piboja_id,-- 被保险人
+ ag01.actl_dept as actl_dept,-- 业绩部门
+ iv01.ivst_clerk_no ivst_clerk_no,-- 核保人
+ iv01.ivst_clerk_dept_cd as ivst_dept, -- 核保部门
+ ag01.co_ins_cls as co_ins_cls,-- 共保区分
+ substr(it03_10141.info_val, 1, 3) as piboja_plc_cd,-- 被保险人所在省
+ it03_10034.info_val as agrm_stt,-- 保单状态
+ rt01.prem_cls as prem_cls,-- 保费类型
+ ag07.endo_bas_date as endo_bas_date,-- 批单生效日期
+ ag01.agrm_start_date as plcy_ins_term_start_dt,-- 起保日期
+ case when ag01.prod_cd not in ('04001') then
+ it03_10036.info_val
+ else ag01.agrm_end_date
+ end as plcy_ins_term_end_dt,-- 终保日期
+ case when ag01.prod_cd not in ('04001') then
+ ic01.covr_start_date
+ else ''
+ end  as covr_ins_term_start_dt,-- 保险起期（绩效日期相关）(水险无该字段)
+ case when ag01.prod_cd not in ('04001') then
+ ic01.appl_start_date
+ else ''
+ end as tran_ins_term_start_dt, -- 起保日期（计算已赚用）（保单批单相关）(水险无该字段)
+ case when instr('03022,03203,03204',ag01.prod_cd) > 0 and it03_10597.info_val is not null then
+ it03_10597.info_val
+ when instr('03025',ag01.prod_cd) > 0 and it03_10636.info_val is not null then
+ it03_10636.info_val
+ else
+ it03_10036.info_val
+ end as tran_ins_term_end_dt,-- 终保日期（计算已赚用）（保单批单相关）
+ ag01.plcy_mnt_unit as mnt_unit,-- 币别
+ case when ag01.agrm_typ = '0' then ag01.contor_name
+ else oc40.eng_ins_dler_name
+ end as contor_nm,-- 投保人名称
+ lpad(gr01.second_level_cls, 2, 0) as second_prod_cls,-- 承保责任二级分类
+ lpad(gr01.three_level_cls, 2, 0) as third_prod_cls,-- 承保责任三级分类
+ lpad(gr01.four_level_cls, 2, 0) as four_prod_cls,-- 承保责任四级分类
+ case
+ when it03_10645.info_val is not null then
+ it03_10645.info_val
+ when ag01.prod_cd = '03306' then
+ 'B4'
+ when ag01.occ_chnl_cls in ('06', '02') then
+  'B1'
+ else
+  gr05.cd_detl_orgn_name3
+ end as cost_center, -- 成本中心
+ case when ic04.tax_free is not null then
+   ic04.tax_free
+ else
+ nvl((case when it03_10179.info_val = 6 then 'N' else 'Y' end),'Y')
+ end as tax_free_yn, -- 是否免税
+ case when ag01.prod_cd not in ('04001')
+ then it03_10136.info_val
+ else ''
+ end as cargo_class, -- 业务分类-货运险：01-内陆、02-进口、03-出口
+ nvl(it03_10011.info_val,100) as our_share, --共保比例
+ cd37.sale_bas as exchange_rate,--兑换率
+ row_number() over(partition by ic01.fk_plcy_no,ic01.event_no,ic01.covr_cd order by ic01.seq_num,ic01.covr_cd asc) as rn
+-- 保批单表
+from ods_oracle.cnglobal__nprt01tb_c rt01 
+-- 保单主表
+join ods_oracle.cnglobal__npag01tb_c ag01 on rt01.fk_plcy_no = ag01.plcy_no and ag01.pt_day = '${hivevar:pt_day}'
+-- 批单主表
+join ods_oracle.cnglobal__npag07tb_c ag07 on rt01.fk_plcy_no  = ag07.fk_plcy_no and rt01.event_no = ag07.event_no and ag07.pt_day = '${hivevar:pt_day}'
+-- 责任主表
+join ods_oracle.cnglobal__npic01tb_c ic01 on rt01.fk_plcy_no = ic01.fk_plcy_no and rt01.event_no = ic01.event_no and ic01.appl_yn = 'Y' and ic01.pt_day = '${hivevar:pt_day}'
+--责任附表，获取责任等级信息
+left join ods_oracle.cnglobal__nsgr01tb_c gr01 on ic01.covr_cd = gr01.fk_item_code and gr01.pt_day = '${hivevar:pt_day}'
+-- 保单拓展表：获取业务条线
+left join ods_oracle.cnglobal__ncgr18tb_c gr18 on ag01.prod_cd = gr18.cpsn_val1 and gr18.code_chng_type = '1003' and gr18.pt_day = '${hivevar:pt_day}'
+-- 处理prod_cd
+left join (select fk_plcy_no,fk_covr_cd,event_no,max(tax_free) as tax_free from ods_oracle.cnglobal__npic04tb_c where pt_day = '${hivevar:pt_day}'  group by fk_plcy_no,fk_covr_cd,event_no) ic04
+on ic04.fk_plcy_no = ic01.fk_plcy_no and ic04.event_no = ic01.event_no and ic04.fk_covr_cd = ic01.covr_cd
+-- 输单、业绩职员信息表：获取渠道人员信息
+left join ods_oracle.cnglobal__npit13tb_c it13 on rt01.fk_plcy_no = it13.fk_plcy_no and rt01.event_no = it13.event_no and it13.agrm_chrg_cls = '1' and it13.pt_day = '${hivevar:pt_day}'
+-- 分割业绩线
+left join (select plcy_no,event_no,clerk_no,count(1)  as countnum from ods_oracle.cnglobal__npit15tb_c where pt_day = '${hivevar:pt_day}' group by plcy_no,event_no,clerk_no) it15
+on it13.fk_plcy_no = it15.plcy_no and it13.event_no = it15.event_no and it15.clerk_no != it13.clerk_no
+--left join (select fk_plcy_no,event_no,info_val,INFO_CD from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10036') it03 on it03.fk_plcy_no = rt01.fk_plcy_no and it03.event_no = rt01.event_no
+--保单维度拓展表:客户类别
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10007') it03_10007 on it03_10007.fk_plcy_no = rt01.fk_plcy_no and it03_10007.event_no = rt01.event_no
+-- 成本中心
+left join ods_oracle.cnglobal__ncgr05tb_c gr05 on gr05.cd_detl_no = it03_10007.info_val and gr05.fk_cd_kd_no = '42' and gr05.pt_day = '${hivevar:pt_day}'
+--保单维度拓展表:分支机构（分公司）
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10035') it03_10035 on it03_10035.fk_plcy_no = rt01.fk_plcy_no and it03_10035.event_no = rt01.event_no
+--保单维度拓展表:直接/经济/代理
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10113') it03_10113 on it03_10113.fk_plcy_no = rt01.fk_plcy_no and it03_10113.event_no = rt01.event_no
+--实际渠道编码，比如经纪或者代理公司编码
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10018') it03_10018 on it03_10018.fk_plcy_no = rt01.fk_plcy_no and it03_10018.event_no = rt01.event_no
+--保单维度拓展表:新保续保区分
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10038') it03_10038 on it03_10038.fk_plcy_no = rt01.fk_plcy_no and it03_10038.event_no = rt01.event_no
+--保单维度拓展表:分入业务的原始分出公司，即哪家保险公司分出业务给我司
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10003') it03_10003 on it03_10003.fk_plcy_no = rt01.fk_plcy_no and it03_10003.event_no = rt01.event_no
+-- 投保人名称
+left join ods_oracle.cnglobal__nroc40tb_c oc40 on it03_10003.info_val = oc40.ins_dler_cd and oc40.pt_day = '${hivevar:pt_day}'
+-- 核保信息表：获取核保人信息
+left join ods_oracle.cnglobal__ngiv01tb_c iv01 on rt01.fk_plcy_no  = iv01.plcy_no and ag07.event_no = rt01.event_no and iv01.proc_cmpl_yn = 'N' and iv01.last_proc_stt = '41' and iv01.pt_day = '${hivevar:pt_day}'
+--保单维度拓展表:被保险人地址
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10141') it03_10141 on it03_10141.fk_plcy_no = rt01.fk_plcy_no and it03_10141.event_no = rt01.event_no
+--保单维度拓展表:保单状态
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10034') it03_10034 on it03_10034.fk_plcy_no = rt01.fk_plcy_no and it03_10034.event_no = rt01.event_no
+-- 分公司
+left join ods_oracle.cnglobal__ncdp00tb_c dp00 on rt01.actl_dept = dp00.dept_cd and dp00.pt_day = '${hivevar:pt_day}'
+--保单维度拓展表:批改后的终保日期
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10036') it03_10036 on it03_10036.fk_plcy_no = rt01.fk_plcy_no and it03_10036.event_no = rt01.event_no
+--保单维度拓展表:手机保险和延保产品的批单截止日期，不体现在批单上，仅作为准备金计算的截止日期使用
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10597') it03_10597 on it03_10597.fk_plcy_no = rt01.fk_plcy_no and it03_10597.event_no = rt01.event_no
+--保单维度拓展表:机动车辆延长保险使用，不体现在保单及批单上，仅作为准备金计算的截止日期使用
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10636') it03_10636 on it03_10636.fk_plcy_no = rt01.fk_plcy_no and it03_10636.event_no = rt01.event_no
+--保单维度拓展表:处理成本中心
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10645') it03_10645 on it03_10645.fk_plcy_no = rt01.fk_plcy_no and it03_10645.event_no = rt01.event_no
+--保单维度拓展表:是否免赔
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10179') it03_10179 on it03_10179.fk_plcy_no = rt01.fk_plcy_no and it03_10179.event_no = rt01.event_no
+--保单维度拓展表:货运险业务分类
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10136') it03_10136 on it03_10136.fk_plcy_no = rt01.fk_plcy_no and it03_10136.event_no = rt01.event_no
+--保单维度拓展表:共保比例
+left join (select fk_plcy_no,event_no,info_val from ods_oracle.cnglobal__npit03tb_c where pt_day = '${hivevar:pt_day}' and INFO_CD='10011') it03_10011 on it03_10011.fk_plcy_no = rt01.fk_plcy_no and it03_10011.event_no = rt01.event_no
+--保单维度拓展表:兑换率
+left join ods_oracle.cnglobal__nccd37tb_c cd37 on cd37.fk_mnt_unit = ag01.plcy_mnt_unit and cd37.bas_date = replace('${hivevar:date_1}','-','') and cd37.ntfy_tms = '1' and cd37.exchng_use_cls = '1' and cd37.pt_day = '${hivevar:pt_day}'
+where 1=1 
+  --and rt01.close_date = replace('${hivevar:date_1}','-','')  
+  and substr(rt01.close_date,1,6) = '202309'
+  and rt01.pt_day = '${hivevar:pt_day}'
+  and rt01.fk_plcy_no in
+('12319001170000','12339000130000','12379000380000','P2369000000804','12259001200000',
+'42199911600034','42199911700033','42399903300002','42399911500004')
+
+) a 
+where a.rn = 1
+;
+
+----指标数据统计
+drop table if exists dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_2;
+create table dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_2 
+  as
+
+with ia09 as (
+select ia09.fk_plcy_no,
+	   ia09.fk_covr_cd,
+	   ia09.event_no,
+	   sum(nvl(ia09.covr_chng_ss_amt_difr,0)) as covr_chng_ss_amt_difr,
+	   sum(nvl(ia09.corp_chng_ss_amt_difr,0)) as corp_chng_ss_amt_difr
+  from ods_oracle.cnglobal__npia09tb_c ia09
+ where ia09.amt_cls = '15'
+   and ia09.pt_day = '${hivevar:pt_day}'
+ group by ia09.fk_plcy_no,ia09.fk_covr_cd,ia09.event_no
+),
+ia09_21 as (
+select ia09_21.fk_plcy_no,
+	   ia09_21.fk_covr_cd,
+	   ia09_21.event_no,
+	   sum(nvl(ia09_21.covr_chng_ss_amt_difr,0)) as covr_chng_ss_amt_difr
+  from ods_oracle.cnglobal__npia09tb_c ia09_21
+ where ia09_21.amt_cls = '21'
+   and ia09_21.pt_day = '${hivevar:pt_day}'
+ group by ia09_21.fk_plcy_no,ia09_21.fk_covr_cd,ia09_21.event_no
+),
+
+pm07 as (
+select pm07.fk_plcy_no,
+	   pm07.event_no,
+	   pm07.fk_covr_cd,
+	   sum(nvl(pm07.ddct_amt,0)) as ddct_amt
+  from ods_oracle.cnglobal__nppm07tb_c pm07
+ where pm07.ddct_cls = '01'
+  and pm07.cisr_cmpn = 'CN00677'
+  and pm07.pt_day = '${hivevar:pt_day}'
+group by pm07.fk_plcy_no,pm07.event_no,pm07.fk_covr_cd
+),
+
+pm05 as (
+select pm05.fk_plcy_no,
+	   pm05.event_no,
+	   sum(nvl(pm05.covr_chng_ss_ddct_amt, 0)) as covr_chng_ss_ddct_amt
+  from ods_oracle.cnglobal__nppm05tb_c pm05
+  join dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1 tab_1
+    on pm05.fk_plcy_no = tab_1.plcy_no
+   and pm05.event_no = tab_1.endo_no
+   and tab_1.agrm_typ = '0'
+  join ods_oracle.cnglobal__npit03tb_c  t1
+    on t1.fk_plcy_no = tab_1.plcy_no 
+   and t1.event_no = tab_1.endo_no
+   and t1.pt_day = '${hivevar:pt_day}'
+   and t1.info_cd = '10113' 
+   and t1.info_val = '02'
+ where pm05.ddct_cls = '01'
+   and pm05.pt_day = '${hivevar:pt_day}'
+ group by pm05.fk_plcy_no,pm05.event_no
+),
+
+pm051 as (
+select pm051.fk_plcy_no,
+	   pm051.event_no,
+	   sum(nvl(pm051.covr_chng_ss_ddct_amt, 0)) as covr_chng_ss_ddct_amt
+  from ods_oracle.cnglobal__nppm05tb_c pm051
+ where pm051.ddct_cls = '02'
+   and pm051.pt_day = '${hivevar:pt_day}'
+ group by pm051.fk_plcy_no,pm051.event_no
+),
+
+pm052 as (
+select pm052.fk_plcy_no,
+	   pm052.event_no,
+	   sum(nvl(pm052.covr_chng_ss_ddct_amt, 0)) as covr_chng_ss_ddct_amt
+  from ods_oracle.cnglobal__nppm05tb_c pm052
+  join dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1 tab_1
+    on pm052.fk_plcy_no = tab_1.plcy_no
+   and pm052.event_no = tab_1.endo_no
+  join ods_oracle.cnglobal__npit03tb_c t1
+    on t1.fk_plcy_no = tab_1.plcy_no 
+   and t1.event_no = tab_1.endo_no
+   and t1.info_cd = '10113' 
+   and t1.info_val = '03'
+   and t1.pt_day = '${hivevar:pt_day}'
+ where pm052.ddct_cls = '01'
+   and pm052.pt_day = '${hivevar:pt_day}'
+ group by pm052.fk_plcy_no,pm052.event_no
+),
+
+
+pm053 as (
+select pm053.fk_plcy_no,
+	   pm053.event_no,
+	   sum(nvl(pm053.covr_chng_ss_ddct_amt, 0)) as covr_chng_ss_ddct_amt
+  from ods_oracle.cnglobal__nppm05tb_c pm053
+  join dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1 tab_1
+    on pm053.fk_plcy_no = tab_1.plcy_no
+   and pm053.event_no = tab_1.endo_no
+   and tab_1.agrm_typ = '0'
+  join ods_oracle.cnglobal__npit03tb_c  t1
+    on t1.fk_plcy_no = tab_1.plcy_no 
+   and t1.event_no = tab_1.endo_no
+   and t1.info_cd = '10113' 
+   and t1.info_val = '04'
+   and t1.pt_day = '${hivevar:pt_day}'
+ where pm053.ddct_cls = '01'
+   and pm053.pt_day = '${hivevar:pt_day}'
+ group by pm053.fk_plcy_no,pm053.event_no
+),
+
+
+pm06 as (
+select t.fk_plcy_no,
+	   t.event_no,
+	   sum(nvl(t.covr_chng_ddct_amt, 0)) as covr_chng_ddct_amt
+  from ods_oracle.cnglobal__nppm06tb_c t
+  join dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1 tab_1
+    on t.fk_plcy_no = tab_1.plcy_no
+   and t.event_no = tab_1.endo_no
+  join ods_oracle.cnglobal__npit03tb_c t1 
+    on t1.fk_plcy_no = tab_1.plcy_no 
+   and t1.event_no = tab_1.endo_no 
+   and t1.info_cd = '10113' 
+   and t1.info_val = '03' 
+   and t1.pt_day = '${hivevar:pt_day}'
+ where (tab_1.agrm_typ = '5' or t1.fk_plcy_no is not null)
+   and t.pt_day = '${hivevar:pt_day}'
+ group by t.fk_plcy_no,t.event_no
+),
+
+pm062 as (--AG01.CO_INS_CLS WHEN '3'
+select pm062.fk_plcy_no,
+	   pm062.event_no,
+	   sum(nvl(pm062.covr_chng_ddct_amt, 0)) as covr_chng_ddct_amt
+  from ods_oracle.cnglobal__nppm06tb_c pm062--一般保单
+ where pm062.fk_ddct_cls = '03'
+   and pm062.cisr_cmpn = 'CN00677'
+   and pm062.pt_day = '${hivevar:pt_day}'
+ group by pm062.fk_plcy_no,pm062.event_no
+),
+
+pm0403 as(
+select 
+t.fk_plcy_no,
+t.event_no,
+max(case when t.ddct_cls = '01' then t.rate else 0 end) as commission_rate,--"手续费比例"
+max(case when t.ddct_cls = '01' and it03.info_val = '02' then t.rate else 0 end) as brokerge_rate,--"经纪费比例"
+max(case when t.ddct_cls = '01' and it03.info_val = '03' then t.rate else 0 end) as agency_rate,--"代理费比例"
+max(case when t.ddct_cls = '03'  then t.rate else 0 end) as coin_rate,--"出单费比例"
+max(case when t.ddct_cls = '02'  then t.rate else 0 end) as survery_rate--"查勘咨询费比例"
+from ods_oracle.cnglobal__nppm04tb_c t
+join ods_oracle.cnglobal__npit03tb_c it03
+on  t.fk_plcy_no = it03.fk_plcy_no
+and t.event_no = it03.event_no
+and it03.info_cd = '10113'
+and it03.pt_day = '${hivevar:pt_day}'
+where t.pt_day = '${hivevar:pt_day}'
+group by t.fk_plcy_no,t.event_no
+),
+
+pm08 as (
+select pm08.fk_plcy_no,
+	   pm08.event_no,
+	   pm08.fk_covr_cd,
+	   SUM(nvl(pm08.corp_chng_covr_prem,0)) as acc_pre_amt
+  from ods_oracle.cnglobal__NPPM08TB_C pm08
+ where pm08.cisr_cmpn = 'CN00677'
+   and pm08.pt_day = '${hivevar:pt_day}'
+ group by pm08.fk_plcy_no,pm08.event_no,pm08.fk_covr_cd
+)
+
+select  tab_1.plcy_no
+	   ,tab_1.endo_no
+	   ,tab_1.covr_cd
+       ,nvl(ia09_21.covr_chng_ss_amt_difr, 0) own_face_amount -- 我司保额
+       ,nvl(ia09.covr_chng_ss_amt_difr, 0) own_premium -- 我司累计保费
+       ,nvl(ia09.covr_chng_ss_amt_difr, 0) own_total_amount -- 我司累计价税合计
+       ,nvl(ia09_21.covr_chng_ss_amt_difr, 0) face_amount -- 保额
+       ,nvl(ia09.covr_chng_ss_amt_difr, 0) premium -- 保费
+       ,nvl(ia09.covr_chng_ss_amt_difr, 0) total_amount -- 价税合计
+       ,cast((nvl(ia09.covr_chng_ss_amt_difr, 0)*(nvl(pm0403.commission_rate,0)/100)) as decimal(23,2)) commission_rate -- 手续费比例
+       ,cast((nvl(ia09.covr_chng_ss_amt_difr, 0)*nvl(pm0403.agency_rate,0)) as decimal(23,2)) agency_rate -- 代理费比例
+       ,cast((nvl(ia09.covr_chng_ss_amt_difr, 0)*(nvl(pm0403.brokerge_rate,0)/100)) as decimal(23,2)) brokerge_rate -- 经纪费比例
+       ,cast((nvl(ia09.covr_chng_ss_amt_difr, 0)*nvl(pm0403.coin_rate,0)) as decimal(23,2)) coin_rate -- 出单费比例
+       ,cast((nvl(ia09.covr_chng_ss_amt_difr, 0)*nvl(pm0403.survery_rate,0)) as decimal(23,2)) survery_rate -- 查勘咨询费比例
+       ,(case tab_1.agrm_typ when '0'then nvl(pm052.covr_chng_ss_ddct_amt, 0) else nvl(pm06.covr_chng_ddct_amt, 0) end) agency_expense -- 代理费
+       ,nvl(pm05.covr_chng_ss_ddct_amt, 0) brokerge -- 经纪费
+       ,case tab_1.co_ins_cls when '2' then nvl(-pm062.covr_chng_ddct_amt,0) when '3' then nvl(pm062.covr_chng_ddct_amt,0) else 0 end as coin_expense -- 出单费
+       ,nvl(pm051.covr_chng_ss_ddct_amt, 0) survery_fee -- 查勘咨询费（业务管理费）
+       ,nvl(pm053.covr_chng_ss_ddct_amt, 0) tm_expense -- 电销费
+       --,0 tm_rate -- 电销费比例
+       --,case when nvl( ia09.covr_chng_ss_amt_difr, 0) = 0 then 0 else nvl(ia09.corp_chng_ss_amt_difr, 0)/nvl( ia09.covr_chng_ss_amt_difr, 0) end exchange_rate -- 本位币汇率
+       ,nvl(pm04.rate,0) prevention_rate -- 安责险费用比例
+       ,pm08.acc_pre_amt prevention_fee -- 安责险费用
+	   --水险
+       ,nvl(pm07.ddct_amt, 0)+ nvl(pm05.covr_chng_ss_ddct_amt,0) commisison_expense_s-- 手续费（代理费+经纪费）水险
+       ,nvl(pm07.ddct_amt, 0) agency_expense_s -- 代理费_水险
+       ,case tab_1.agrm_typ when '0' then nvl(pm05.covr_chng_ss_ddct_amt,0) else nvl(pm06.covr_chng_ddct_amt,0) end tm_expense_s -- 电销费
+       --,0 tm_rate_s -- 电销费比例
+  from dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1 tab_1
+  left join ia09 ia09
+    on ia09.fk_plcy_no = tab_1.plcy_no
+   and ia09.event_no = tab_1.endo_no
+   and ia09.fk_covr_cd = tab_1.covr_cd
+  left join ia09_21 ia09_21
+    on ia09_21.fk_plcy_no = tab_1.plcy_no
+   and ia09_21.event_no = tab_1.endo_no
+   and ia09_21.fk_covr_cd = tab_1.covr_cd
+  left join pm05 pm05
+    on pm05.fk_plcy_no = tab_1.plcy_no
+   and pm05.event_no = tab_1.endo_no
+  left join pm051 pm051
+    on pm051.fk_plcy_no = tab_1.plcy_no
+   and pm051.event_no = tab_1.endo_no
+  left join pm052 pm052
+    on pm052.fk_plcy_no = tab_1.plcy_no
+   and pm052.event_no = tab_1.endo_no
+  left join pm053 pm053
+    on pm053.fk_plcy_no = tab_1.plcy_no
+   and pm053.event_no = tab_1.endo_no
+  left join pm06 pm06
+    on pm06.fk_plcy_no = tab_1.plcy_no
+   and pm06.event_no = tab_1.endo_no
+  left join pm062 pm062
+    on pm062.fk_plcy_no = tab_1.plcy_no
+   and pm062.event_no = tab_1.endo_no
+ left join ods_oracle.cnglobal__nppm04tb_c pm04
+   on tab_1.plcy_no = pm04.fk_plcy_no
+  and tab_1.endo_no = pm04.event_no
+  and pm04.ddct_cls = '04'
+  and pm04.pt_day = '${hivevar:pt_day}'
+ left join pm0403 pm0403
+   on pm0403.fk_plcy_no = tab_1.plcy_no
+  and pm0403.event_no = tab_1.endo_no
+ left join pm08 pm08
+   on pm08.fk_plcy_no = tab_1.plcy_no
+  and pm08.event_no = tab_1.endo_no
+  and pm08.fk_covr_cd = tab_1.covr_cd 
+ left join pm07 pm07
+   on tab_1.plcy_no = pm07.fk_plcy_no
+  and tab_1.endo_no = pm07.event_no
+  and tab_1.covr_cd = pm07.fk_covr_cd
+;
+
+
+
+INSERT OVERWRITE TABLE dwd_sit.t_dwd_variety_liability_info_dd_test partition (pt_day, system_source)
+--一般保单+水险
+select  '' group_policy_no -- 团单号
+       ,tab_1.plcy_no policy_no -- 保单号
+       ,tab_1.endo_no endorse_no -- 批单号
+       ,tab_1.actl_sprt_cls term_no -- 期次
+       ,'' proposal_no -- 投保单
+       ,tab_1.bsns_line business_line -- 业务条线（circ18大类）
+       ,tab_1.prod_cd product_code -- 产品编码
+       ,'' risk_no -- 险种单号
+       ,tab_1.prod_cd risk_code -- 险种编码
+       ,'' liability_no -- 责任单号(险别）
+       ,tab_1.covr_cd liability_code -- 责任编码(险别）
+       ,0 vat_tax_rate -- 增值税税率
+	   ,tab_1.tax_free_yn vat_tax_free_flag -- 是否免税
+       ,nvl(t.own_face_amount, 0) own_face_amount -- 我司保额
+       ,0 own_risk_amount -- 我司风险保额
+       ,nvl(t.own_premium, 0) own_premium -- 我司累计保费
+       ,0 own_vat_tax -- 我司累计增值税税额
+       ,nvl(t.own_total_amount, 0) own_total_amount -- 我司累计价税合计
+       ,nvl(t.face_amount, 0) face_amount -- 保额
+       ,0 risk_amount -- 风险保额
+       ,nvl(t.premium, 0) premium -- 保费
+       ,0 vat_tax -- 增值税税额
+       ,nvl(t.total_amount,0) total_amount -- 价税合计
+       ,nvl(t.commission_rate,0) commission_rate -- 手续费比例
+       ,nvl(t.agency_rate,0) agency_rate -- 代理费比例
+       ,nvl(t.brokerge_rate,0) brokerge_rate -- 经纪费比例
+       ,nvl(t.coin_rate,0) coin_rate -- 出单费比例
+       ,nvl(t.survery_rate,0) survery_rate -- 查勘咨询费比例
+       ,0 tm_rate -- 电销费比例
+       ,0 promote_rate -- 展业费比例
+	   ,if(tab_1.prod_cd <> '04001',(nvl(t.agency_expense,0)+nvl(t.brokerge,0)),(nvl(t.agency_expense_s,0)+nvl(t.brokerge,0))) commisison_expense -- 手续费（代理费+经纪费）
+       ,if(tab_1.prod_cd <> '04001',nvl(t.agency_expense,0),nvl(t.agency_expense_s,0)) agency_expense -- 代理费
+       ,nvl(t.brokerge, 0) brokerge -- 经纪费
+       ,nvl(t.coin_expense,0) as coin_expense -- 出单费
+       ,nvl(t.survery_fee, 0) survery_fee -- 查勘咨询费（业务管理费）
+       ,if(tab_1.prod_cd <> '04001',nvl(t.tm_expense, 0),nvl(t.tm_expense_s, 0)) tm_expense -- 电销费
+       ,0 promote_fee -- 展业费
+       ,tab_1.second_prod_cls liability_second_class -- 承保责任二级分类
+       ,tab_1.third_prod_cls liability_third_class -- 承保责任三级分类
+       ,tab_1.four_prod_cls liability_four_class -- 承保责任四级分类
+       ,nvl(tab_1.exchange_rate,0) exchange_rate -- 本位币汇率
+       ,if(tab_1.prod_cd <> '04001',nvl(t.prevention_rate,0),0) prevention_rate -- 安责险费用比例
+       ,if(tab_1.prod_cd <> '04001',nvl(t.prevention_fee,0),0) prevention_fee -- 安责险费用
+	   ,tab_1.tran_ins_term_end_dt newend_date--最新终保日期
+       ,'' settle_serial_no -- 结算流水号
+       ,0 commission_expense_vat -- 手续费税额（代理费+经纪费）
+       ,0 agency_expense_vat -- 代理费税额
+       ,0 brokerge_vat -- 经纪费税额
+       ,0 commission_vat_rate -- 手续费税率
+       ,substr(cast(from_unixtime(UNIX_TIMESTAMP()) as string) ,1,10) input_date -- 数据日期, yyyy-mm-dd
+       ,last_day(to_date(from_unixtime(UNIX_TIMESTAMP('${hivevar:pt_day}','yyyy-MM-dd')))) pt_day -- 数据日期, yyyy-mm-dd
+       ,'GLOBAL' system_source -- 系统来源GLABAL（global） AUTO（车险） CORE（新非车）
+  from dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1 tab_1
+  left join dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_2 t
+    on t.plcy_no = tab_1.plcy_no
+   and t.endo_no = tab_1.endo_no
+   and t.covr_cd = tab_1.covr_cd
+;
+ 
+
+
+
+insert into dwd_sit.t_dwd_variety_liability_info_dd_test
+--合约分入
+select  '' group_policy_no -- 团单号
+       ,oc78.reference_no policy_no -- 保单号
+       ,'0000' endorse_no -- 批单号
+       ,'00' term_no -- 期次
+       ,'' proposal_no -- 投保单
+       ,gr18.data_val1 business_line -- 业务条线（circ18大类）
+       ,oc69.prod_cd product_code -- 产品编码
+       ,'' risk_no -- 险种单号
+       ,oc69.prod_cd risk_code -- 险种编码
+       ,'' liability_no -- 责任单号(险别）
+       ,'00' liability_code -- 责任编码(险别）
+       ,0 vat_tax_rate -- 增值税税率
+       ,oc78.free_type vat_tax_free_flag -- 是否免税
+       ,0 own_face_amount -- 我司保额
+       ,0 own_risk_amount -- 我司风险保额
+       ,sum(oc69.premium) own_premium -- 我司累计保费
+       ,0 own_vat_tax -- 我司累计增值税税额
+       ,sum(oc69.premium) own_total_amount -- 我司累计价税合计
+       ,0 face_amount -- 保额
+       ,0 risk_amount -- 风险保额
+       ,sum(oc69.premium) premium -- 保费
+       ,0 vat_tax -- 增值税税额
+       ,sum(oc69.premium) total_amount -- 价税合计
+       ,case when sum(oc69.premium) = 0 then 0  else sum(oc69.broker_amt)/sum(oc69.premium) end commission_rate -- 手续费比例
+       ,case when sum(oc69.premium) = 0 then 0  else sum(oc69.premium) end agency_rate -- 代理费比例
+       ,case when sum(oc69.premium) = 0 then 0  else sum(oc69.broker_amt)/sum(oc69.premium) end brokerge_rate -- 经纪费比例
+       ,case when sum(oc69.premium) = 0 then 0  else 0 end coin_rate -- 出单费比例
+       ,case when sum(oc69.premium) = 0 then 0  else sum(oc69.premium) end survery_rate -- 查勘咨询费比例
+       ,0 tm_rate -- 电销费比例
+       ,0 promote_rate -- 展业费比例
+       ,sum(oc69.broker_amt) commission_expense -- 手续费（代理费+经纪费）
+       ,0 agency_expense -- 代理费
+       ,sum(oc69.broker_amt) brokerge -- 经纪费
+       ,0 coin_expense -- 出单费
+       ,0 survery_fee -- 查勘咨询费（业务管理费）
+       ,sum(oc69.comm_amt) tm_expense -- 电销费
+       ,0 promote_fee -- 展业费
+       ,'' liability_second_class -- 承保责任二级分类
+       ,'' liability_third_class -- 承保责任三级分类
+       ,'' liability_four_class -- 承保责任四级分类
+       ,case when sum(oc69.premium) = 0 then 0  else sum(oc69.corp_chng_premium)/sum(oc69.premium) end exchange_rate -- 本位币汇率
+       ,0 prevention_rate -- 安责险费用比例
+       ,0 prevention_fee -- 安责险费用
+	   ,oc78.end_date newend_date--最新终保日期
+       ,'' settle_serial_no -- 结算流水号
+       ,0 commission_expense_vat -- 手续费税额（代理费+经纪费）
+       ,0 agency_expense_vat -- 代理费税额
+       ,0 brokerge_vat -- 经纪费税额
+       ,0 commission_vat_rate -- 手续费税率
+       ,substr(cast(from_unixtime(UNIX_TIMESTAMP()) as string) ,1,10) input_date -- 数据日期, yyyy-mm-dd
+       ,last_day(to_date(from_unixtime(UNIX_TIMESTAMP(regexp_replace('${hivevar:pt_day}','-',''),'yyyyMMdd')))) pt_day -- 数据日期, yyyy-mm-dd
+       ,'GLOBAL' system_source -- 系统来源GLABAL（global） AUTO（车险） CORE（新非车）
+
+ from ods_oracle.cnglobal__nroc78tb_c oc78
+ left join ods_oracle.cnglobal__nroc69tb_c oc69
+   on oc78.reference_no = oc69.reference_no
+  and oc78.cls = oc69.cls
+  and oc78.cls = '2'
+  and oc69.prod_cd != '04001'
+  and oc69.pt_day = '${hivevar:pt_day}'
+ left join ods_oracle.cnglobal__ncgr18tb_c gr18
+   on gr18.cpsn_val1 = oc69.prod_cd
+  and gr18.code_chng_type = '1003'
+  and gr18.pt_day = '${hivevar:pt_day}'
+ left join ods_oracle.cnglobal__nccd37tb_c cd37 -- 兑换率
+   on cd37.fk_mnt_unit = oc78.currency
+  and cd37.bas_date = replace('${hivevar:date_1}','-','')
+  and cd37.ntfy_tms = '1'
+  and cd37.exchng_use_cls = '1'
+  and cd37.pt_day = '${hivevar:pt_day}'
+where oc78.confirm_date = replace('${hivevar:date_1}','-','')
+  and oc78.pt_day = '${hivevar:pt_day}'
+  and oc78.reference_no in 
+('52219000870000','52219000880000','52319001160000','52219000230000','61919000030000',
+'82019000010000','82219000050000','82219000210000','82319000140000')
+group by  oc78.reference_no
+       ,gr18.data_val1
+       ,oc69.prod_cd
+       ,oc69.prod_cd
+       ,oc78.free_type
+	   ,oc78.end_date
+       ,substr(cast(from_unixtime(UNIX_TIMESTAMP()) as string) ,1,10)
+       ,last_day(to_date(from_unixtime(UNIX_TIMESTAMP(substr(regexp_replace('${hivevar:pt_day}','-',''),1,6),'yyyyMMdd'))))
+;
+
+drop table if exists dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_1;
+drop table if exists dwd_sit.t_dwd_variety_liability_info_dd_test_tmp_2;
